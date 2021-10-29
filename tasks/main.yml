@@ -1,0 +1,49 @@
+---
+- name: Install Redis
+  yum:
+    name: redis
+    state: present
+
+- name: Create new firewalld zone for Redis
+  firewalld:
+    zone: redis
+    permanent: yes
+    state: present
+  register: redis_firewall
+
+- name: Reload Firewalld for new Redis zone
+  service:
+    name: firewalld
+    state: reloaded
+  when: redis_firewall.changed
+
+- name: Ensure Redis port is opened
+  firewalld:
+    port: "{{ redis_port | default('6379') }}/tcp"
+    permanent: yes
+    immediate: yes
+    state: enabled
+    zone: redis
+
+- name: Restrict external access to Redis
+  firewalld:
+    source: "{{ item }}"
+    permanent: true
+    immediate: yes
+    state: enabled
+    zone: redis
+  with_items: "{{ redis_allow_hosts }}"
+
+- name: Set Redit bind address
+  lineinfile:
+    line: bind {{ redis_bind }}
+    path: /etc/redis.conf
+    regexp: bind.*
+    state: present
+  notify: Restart redis
+    
+- name: Ensure Redis is started
+  service:
+    name: redis
+    state: started
+    enabled: yes
